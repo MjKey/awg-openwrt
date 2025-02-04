@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "v*.*.*"
+      - "v24.10.0"
   workflow_call:
     inputs:
       tag_name:
