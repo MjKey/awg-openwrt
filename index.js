@@ -2,17 +2,10 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const core = require('@actions/core');
 
-const version = process.argv[2]; // Получение версии OpenWRT из аргумента командной строки
-
-const SNAPSHOT_TARGETS_TO_BUILD = ['ramips'];
-const SNAPSHOT_SUBTARGETS_TO_BUILD = ['mt7621'];
-
-if (!version) {
-  core.setFailed('Version argument is required');
-  process.exit(1);
-}
-
-const url = version === 'SNAPSHOT' ? 'https://downloads.openwrt.org/snapshots/targets/' : `https://downloads.openwrt.org/releases/${version}/targets/`;
+// Устанавливаем фиксированные значения
+const version = '24.10.0';
+const target = 'ramips';
+const baseUrl = `https://downloads.openwrt.org/releases/${version}/targets/${target}/`;
 
 async function fetchHTML(url) {
   try {
@@ -24,20 +17,8 @@ async function fetchHTML(url) {
   }
 }
 
-async function getTargets() {
-  const $ = await fetchHTML(url);
-  const targets = [];
-  $('table tr td.n a').each((index, element) => {
-    const name = $(element).attr('href');
-    if (name && name.endsWith('/')) {
-      targets.push(name.slice(0, -1));
-    }
-  });
-  return targets;
-}
-
-async function getSubtargets(target) {
-  const $ = await fetchHTML(`${url}${target}/`);
+async function getSubtargets() {
+  const $ = await fetchHTML(baseUrl);
   const subtargets = [];
   $('table tr td.n a').each((index, element) => {
     const name = $(element).attr('href');
@@ -48,8 +29,8 @@ async function getSubtargets(target) {
   return subtargets;
 }
 
-async function getDetails(target, subtarget) {
-  const packagesUrl = `${url}${target}/${subtarget}/packages/`;
+async function getDetails(subtarget) {
+  const packagesUrl = `${baseUrl}${subtarget}/packages/`;
   const $ = await fetchHTML(packagesUrl);
   let vermagic = '';
   let pkgarch = '';
@@ -70,24 +51,19 @@ async function getDetails(target, subtarget) {
 
 async function main() {
   try {
-    const targets = await getTargets();
+    const subtargets = await getSubtargets();
     const jobConfig = [];
 
-    for (const target of targets) {
-      const subtargets = await getSubtargets(target);
-      for (const subtarget of subtargets) {
-        const { vermagic, pkgarch } = await getDetails(target, subtarget);
-
-        if (version !== 'SNAPSHOT' || (SNAPSHOT_SUBTARGETS_TO_BUILD.includes(subtarget) && SNAPSHOT_TARGETS_TO_BUILD.includes(target))) {
-          jobConfig.push({
-            tag: version,
-            target,
-            subtarget,
-            vermagic,
-            pkgarch,
-          });
-        }
-      }
+    for (const subtarget of subtargets) {
+      const { vermagic, pkgarch } = await getDetails(subtarget);
+      
+      jobConfig.push({
+        tag: version,
+        target,
+        subtarget,
+        vermagic,
+        pkgarch,
+      });
     }
 
     core.setOutput('job-config', JSON.stringify(jobConfig));
